@@ -546,7 +546,7 @@ class OpenCTIStix2:
         ):
             stix_object["id"] = stix_object["id"].replace("identity", "location")
             stix_object["type"] = "location"
-
+        print(f'types: {types}')
         do_import = importer.get(
             stix_object["type"],
             lambda **kwargs: self.unknown_type(stix_object),
@@ -1582,30 +1582,33 @@ class OpenCTIStix2:
                     elif item["type"] in types or "observable" in types:
                         self.import_observable(item, update, types)
                 else:
-                    # Check the scope
-                    if (
-                        item["type"] == "marking-definition"
-                        or types is None
-                        or len(types) == 0
-                    ):
+                    # Handle identity & location if part of the scope and specific OpenCTI scopes
+                    if self.marking_definition(item, types) or item_in_types(item,types) or self.importable_identity(item, types) or self.location_in_types(item, types):
                         self.import_object(item, update, types)
-                    # Handle identity & location if part of the scope
-                    elif item["type"] in types:
-                        self.import_object(item, update, types)
-                    else:
-                        # Specific OpenCTI scopes
-                        if item["type"] == "identity":
-                            if "identity_class" in item:
-                                if ("class" in types or "sector" in types) and item[
-                                    "identity_class"
-                                ] == "class":
-                                    self.import_object(item, update, types)
-                                elif item["identity_class"] in types:
-                                    self.import_object(item, update, types)
-                        elif item["type"] == "location":
-                            if "x_opencti_location_type" in item:
-                                if item["x_opencti_location_type"].lower() in types:
-                                    self.import_object(item, update, types)
                 imported_elements.append({"id": item["id"], "type": item["type"]})
 
         return imported_elements
+
+    def marking_definition(self, item, types):
+        return (item["type"] == "marking-definition" or types is None or len(types) == 0)
+
+    def importable_identity(self, item, types):
+        is_identity = item["type"] == "identity"
+        identity_class_in_item = "identiy_class" in item
+        identity_and_class_in_item = is_identity and identity_class_in_item
+
+        class_in_types = "class" in types
+        sector_in_types = "sector" in types
+        class_or_sector = (class_in_types or sector_in_types)
+
+        identity_class_is_class = item["identity_class"] == "class"
+        identity_class_in_types = item["identity_class"] in types
+        importable_class = (identity_class_is_class or identity_class_in_types)
+
+        return (identity_and_class_in_item and class_or_sector and importable_class)
+
+    def location_in_types(item, types):
+        location_type = item["type"] == "location"
+        in_item = "x_opencti_location_type" in item
+        in_types = item["x_opencti_location_type"].lower() in types
+        return location_type and in_item and in_types
